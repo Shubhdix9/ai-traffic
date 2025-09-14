@@ -1,1 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Traffic Management System - Live CCTV & Detection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .pulse-green { animation: pulse-green 2s infinite; }
+        @keyframes pulse-green {
+            0%, 100% { background-color: rgb(34, 197, 94); }
+            50% { background-color: rgb(22, 163, 74); }
+        }
+        .pulse-red { animation: pulse-red 2s infinite; }
+        @keyframes pulse-red {
+            0%, 100% { background-color: rgb(239, 68, 68); }
+            50% { background-color: rgb(220, 38, 38); }
+        }
+        .pulse-yellow { animation: pulse-yellow 2s infinite; }
+        @keyframes pulse-yellow {
+            0%, 100% { background-color: rgb(234, 179, 8); }
+            50% { background-color: rgb(202, 138, 4); }
+        }
+        .traffic-light {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin: 2px 0;
+        }
+        .intersection-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            max-width: 600px;
+        }
+        .road-horizontal {
+            height: 4px;
+            background: #374151;
+            position: relative;
+        }
+        .road-vertical {
+            width: 4px;
+            height: 60px;
+            background: #374151;
+            position: relative;
+            margin: 0 auto;
+        }
+        .vehicle {
+            width: 8px;
+            height: 4px;
+            background: #3b82f6;
+            position: absolute;
+            border-radius: 1px;
+            animation: moveVehicle 3s linear infinite;
+        }
+        @keyframes moveVehicle {
+            0% { left: 0; }
+            100% { left: calc(100% - 8px); }
+        }
+        .congestion-high { background: #ef4444 !important; }
+        .congestion-medium { background: #f59e0b !important; }
+        .congestion-low { background: #10b981 !important; }
+        
+        /* CCTV Feed Styles */
+        .cctv-feed {
+            background: #1f2937;
+            border: 2px solid #374151;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        .cctv-feed.active {
+            border-color: #10b981;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+        }
+        .detection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+        .detection-box {
+            position: absolute;
+            border: 2px solid;
+            border-radius: 4px;
+            font-size: 10px;
+            padding: 2px 4px;
+            color: white;
+            font-weight: bold;
+            animation: detectPulse 1s ease-in-out;
+        }
+        @keyframes detectPulse {
+            0% { opacity: 0; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .detection-car { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); }
+        .detection-person { border-color: #f59e0b; background: rgba(245, 158, 11, 0.2); }
+        .detection-truck { border-color: #ef4444; background: rgba(239, 68, 68, 0.2); }
+        .detection-bike { border-color: #10b981; background: rgba(16, 185, 129, 0.2); }
+        
+        /* Video Upload Styles */
+        .upload-zone {
+            border: 2px dashed #6b7280;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+        }
+        
+        /* AI Model Status */
+        .model-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: #374151;
+            border-radius: 6px;
+            margin: 4px 0;
+        }
+        .model-active { background: rgba(16, 185, 129, 0.2); border-left: 3px solid #10b981; }
+        .model-processing { background: rgba(59, 130, 246, 0.2); border-left: 3px solid #3b82f6; }
+        .model-warning { background: rgba(245, 158, 11, 0.2); border-left: 3px solid #f59e0b; }
+        
+        /* Live Stats */
+        .live-stat {
+            background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+            border: 1px solid #4b5563;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #3b82f6, #10b981);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Incident Alert Styles */
+        .incident-alert {
+            border-left: 4px solid;
+            background: rgba(0, 0, 0, 0.3);
+            animation: incidentPulse 2s infinite;
+        }
+        .incident-critical { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .incident-warning { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+        .incident-info { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        
+        @keyframes incidentPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .incident-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(239, 68, 68, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            animation: incidentFlash 1s infinite;
+            z-index: 10;
+        }
+        
+        @keyframes incidentFlash {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 0.4; }
+        }
+        
+        .intersection-incident {
+            border: 3px solid #ef4444 !important;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important;
+            animation: intersectionAlert 2s infinite;
+        }
+        
+        @keyframes intersectionAlert {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">AI Traffic Management System</h1>
+                    <p class="text-gray-400 text-sm">Real-time Traffic Optimization Dashboard</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="text-right">
+                    <div class="text-sm text-gray-400">System Status</div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-500 rounded-full pulse-green"></div>
+                        <span class="text-green-400 font-medium">Active</span>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm text-gray-400">Last Update</div>
+                    <div id="lastUpdate" class="font-medium">--:--:--</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <aside class="w-80 bg-gray-800 border-r border-gray-700 p-6 overflow-y-auto">
+            <div class="space-y-6">
+                <!-- Live Detection Stats -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path fill-rule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.675 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clip-rule="evenodd"/>
+                        </svg>
+                        Live Detection Stats
+                    </h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="live-stat rounded-lg p-3 text-center">
+                            <div class="stat-value" id="vehicleCount">247</div>
+                            <div class="text-xs text-gray-400">Vehicles</div>
+                        </div>
+                        <div class="live-stat rounded-lg p-3 text-center">
+                            <div class="stat-value" id="personCount">89</div>
+                            <div class="text-xs text-gray-400">Pedestrians</div>
+                        </div>
+                        <div class="live-stat rounded-lg p-3 text-center">
+                            <div class="stat-value" id="bikeCount">23</div>
+                            <div class="text-xs text-gray-400">Bikes</div>
+                        </div>
+                        <div class="live-stat rounded-lg p-3 text-center">
+                            <div class="stat-value" id="truckCount">12</div>
+                            <div class="text-xs text-gray-400">Trucks</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Model Pipeline -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12a1 1 0 01-.117-1.993L9 10h2a1 1 0 01.117 1.993L11 12H9z"/>
+                            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+                        </svg>
+                        AI Model Pipeline
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="model-status model-active">
+                            <div>
+                                <div class="text-sm font-medium">YOLOv8 Detection</div>
+                                <div class="text-xs text-gray-400">FPS: <span id="yoloFps">28.5</span> | Conf: 0.35</div>
+                            </div>
+                            <div class="w-2 h-2 bg-green-500 rounded-full pulse-green"></div>
+                        </div>
+                        <div class="model-status model-active">
+                            <div>
+                                <div class="text-sm font-medium">DeepSORT Tracking</div>
+                                <div class="text-xs text-gray-400">Tracks: <span id="activeTrack">156</span> | Age: 30</div>
+                            </div>
+                            <div class="w-2 h-2 bg-green-500 rounded-full pulse-green"></div>
+                        </div>
+                        <div class="model-status model-processing">
+                            <div>
+                                <div class="text-sm font-medium">OpenCV Processing</div>
+                                <div class="text-xs text-gray-400">Filters: Motion, Blur, ROI</div>
+                            </div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        </div>
+                        <div class="model-status model-active">
+                            <div>
+                                <div class="text-sm font-medium">RL Optimization</div>
+                                <div class="text-xs text-gray-400">Reward: <span id="rlReward">+0.87</span> | Episodes: 2.4k</div>
+                            </div>
+                            <div class="w-2 h-2 bg-green-500 rounded-full pulse-green"></div>
+                        </div>
+                        <div class="model-status model-warning">
+                            <div>
+                                <div class="text-sm font-medium">Anomaly Detection</div>
+                                <div class="text-xs text-gray-400">Threshold: 0.8 | Alerts: 2</div>
+                            </div>
+                            <div class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Performance Metrics -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
+                        </svg>
+                        Performance Metrics
+                    </h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">Avg. Commute Reduction</span>
+                            <span class="text-green-400 font-bold" id="commuteReduction">12.3%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">Detection Accuracy</span>
+                            <span class="text-blue-400 font-bold" id="accuracy">96.8%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">Signal Optimization</span>
+                            <span class="text-purple-400 font-bold" id="optimization">94.2%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">Processing Latency</span>
+                            <span class="text-yellow-400 font-bold" id="latency">45ms</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Incident Detection System -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5v3a.75.75 0 001.5 0v-3A.75.75 0 009 9z" clip-rule="evenodd"/>
+                        </svg>
+                        Incident Detection
+                    </h3>
+                    <div class="space-y-2" id="incidentAlerts">
+                        <div class="text-sm text-gray-400 text-center py-2">No active incidents detected</div>
+                    </div>
+                    <div class="mt-4 space-y-2">
+                        <button class="w-full bg-orange-600 hover:bg-orange-700 text-white py-2 px-3 rounded-lg transition-colors text-sm" onclick="simulateIncident('accident')">
+                            🚗 Simulate Accident
+                        </button>
+                        <button class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg transition-colors text-sm" onclick="simulateIncident('police')">
+                            🚔 Police Activity
+                        </button>
+                        <button class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded-lg transition-colors text-sm" onclick="simulateIncident('ambulance')">
+                            🚑 Emergency Vehicle
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Emergency Controls -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                        Emergency Controls
+                    </h3>
+                    <div class="space-y-3">
+                        <button class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors" onclick="emergencyOverride()">
+                            Emergency Override
+                        </button>
+                        <button class="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded-lg transition-colors" onclick="pauseSystem()">
+                            Pause AI System
+                        </button>
+                        <button class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors" onclick="resetOptimization()">
+                            Reset Optimization
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-6 overflow-y-auto">
+            <div class="space-y-6">
+                <!-- Live CCTV Feeds -->
+                <div class="bg-gray-800 rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 6a2 2 0 012-2h6l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/>
+                            </svg>
+                            Live CCTV Feeds & AI Detection
+                        </h2>
+                        <div class="flex items-center space-x-4">
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="file" id="videoUpload" accept="video/*" class="hidden" onchange="handleVideoUpload(event)">
+                                <button onclick="document.getElementById('videoUpload').click()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                                    Upload Video
+                                </button>
+                            </label>
+                            <button onclick="toggleAllFeeds()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                                Toggle All Feeds
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                        <!-- CCTV Feed 1 -->
+                        <div class="cctv-feed active" id="feed1">
+                            <div class="aspect-video bg-gray-900 relative">
+                                <div class="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-bold">
+                                    🔴 LIVE - CAM 01
+                                </div>
+                                <div class="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
+                                    JKLU Campus Gate
+                                </div>
+                                <canvas id="canvas1" class="w-full h-full"></canvas>
+                                <div class="detection-overlay" id="overlay1"></div>
+                                <div class="absolute bottom-2 left-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs">
+                                    Detections: <span id="count1">8</span> | FPS: <span id="fps1">30</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CCTV Feed 2 -->
+                        <div class="cctv-feed active" id="feed2">
+                            <div class="aspect-video bg-gray-900 relative">
+                                <div class="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-bold">
+                                    🔴 LIVE - CAM 02
+                                </div>
+                                <div class="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
+                                    Mahapura Circle
+                                </div>
+                                <canvas id="canvas2" class="w-full h-full"></canvas>
+                                <div class="detection-overlay" id="overlay2"></div>
+                                <div class="absolute bottom-2 left-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs">
+                                    Detections: <span id="count2">12</span> | FPS: <span id="fps2">29</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CCTV Feed 3 -->
+                        <div class="cctv-feed active" id="feed3">
+                            <div class="aspect-video bg-gray-900 relative">
+                                <div class="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-bold">
+                                    🔴 LIVE - CAM 03
+                                </div>
+                                <div class="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
+                                    Bagru Chauraha
+                                </div>
+                                <canvas id="canvas3" class="w-full h-full"></canvas>
+                                <div class="detection-overlay" id="overlay3"></div>
+                                <div class="absolute bottom-2 left-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs">
+                                    Detections: <span id="count3">5</span> | FPS: <span id="fps3">28</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- User Video Upload -->
+                        <div class="cctv-feed" id="userFeed" style="display: none;">
+                            <div class="aspect-video bg-gray-900 relative">
+                                <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">
+                                    📹 USER VIDEO
+                                </div>
+                                <video id="userVideo" class="w-full h-full object-cover" controls></video>
+                                <div class="detection-overlay" id="userOverlay"></div>
+                                <div class="absolute bottom-2 left-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs">
+                                    Detections: <span id="userCount">0</span> | Processing...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detection Legend -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <h4 class="font-medium mb-3">Detection Legend</h4>
+                        <div class="flex flex-wrap gap-4">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-4 h-4 border-2 border-blue-500 bg-blue-500 bg-opacity-20 rounded"></div>
+                                <span class="text-sm">Cars</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-4 h-4 border-2 border-yellow-500 bg-yellow-500 bg-opacity-20 rounded"></div>
+                                <span class="text-sm">Pedestrians</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-4 h-4 border-2 border-red-500 bg-red-500 bg-opacity-20 rounded"></div>
+                                <span class="text-sm">Trucks</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-4 h-4 border-2 border-green-500 bg-green-500 bg-opacity-20 rounded"></div>
+                                <span class="text-sm">Bikes</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Traffic Grid Overview -->
+                <div class="bg-gray-800 rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center">
+                        <svg class="w-6 h-6 mr-2 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                        </svg>
+                        AI-Optimized Traffic Grid - Jaipur JKLU Area
+                    </h2>
+                    
+                    <div class="intersection-grid mx-auto mb-6">
+                        <!-- Row 1 -->
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="A1">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">JKLU Gate</div>
+                                <div class="text-xs text-gray-400">JKLU Campus & Mahapura Rd</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-red-500 pulse-red" data-light="red"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="yellow"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-medium">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-low"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-yellow-400">Medium Traffic</span>
+                            </div>
+                        </div>
+
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="A2">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Mahapura Circle</div>
+                                <div class="text-xs text-gray-400">Mahapura Rd & NH-48</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-gray-600" data-light="red"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="yellow"></div>
+                                    <div class="traffic-light bg-green-500 pulse-green" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-low">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-low"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-green-400">Light Traffic</span>
+                            </div>
+                        </div>
+
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="A3">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Ajmer Road Junction</div>
+                                <div class="text-xs text-gray-400">Ajmer Rd & Ring Rd</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-gray-600" data-light="red"></div>
+                                    <div class="traffic-light bg-yellow-500 pulse-yellow" data-light="yellow"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-high">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-medium"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-red-400">Heavy Traffic</span>
+                            </div>
+                        </div>
+
+                        <!-- Row 2 -->
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="B1">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Bagru Chauraha</div>
+                                <div class="text-xs text-gray-400">Bagru Rd & Village Rd</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-gray-600" data-light="red"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="yellow"></div>
+                                    <div class="traffic-light bg-green-500 pulse-green" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-low">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-medium"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-green-400">Light Traffic</span>
+                            </div>
+                        </div>
+
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="B2">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Sitapura Industrial</div>
+                                <div class="text-xs text-gray-400">Sitapura Rd & RIICO Rd</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-red-500 pulse-red" data-light="red"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="yellow"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-medium">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-high"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-yellow-400">Medium Traffic</span>
+                            </div>
+                        </div>
+
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="B3">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Tonk Road Circle</div>
+                                <div class="text-xs text-gray-400">Tonk Rd & JLN Marg</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-gray-600" data-light="red"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="yellow"></div>
+                                    <div class="traffic-light bg-green-500 pulse-green" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-low">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-low"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-green-400">Light Traffic</span>
+                            </div>
+                        </div>
+
+                        <!-- Row 3 -->
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="C1">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Sanganer Airport</div>
+                                <div class="text-xs text-gray-400">Airport Rd & Sanganer Rd</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-gray-600" data-light="red"></div>
+                                    <div class="traffic-light bg-yellow-500 pulse-yellow" data-light="yellow"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-medium">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-medium"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-yellow-400">Medium Traffic</span>
+                            </div>
+                        </div>
+
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="C2">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Mansarovar Metro</div>
+                                <div class="text-xs text-gray-400">Mansarovar & Shipra Path</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-red-500 pulse-red" data-light="red"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="yellow"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-high">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-medium"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-red-400">Heavy Traffic</span>
+                            </div>
+                        </div>
+
+                        <div class="intersection-card bg-gray-700 p-4 rounded-lg" data-intersection="C3">
+                            <div class="text-center mb-2">
+                                <div class="text-sm font-medium">Vaishali Nagar</div>
+                                <div class="text-xs text-gray-400">Vaishali & Durgapura Rd</div>
+                            </div>
+                            <div class="flex justify-center mb-2">
+                                <div class="traffic-light-container">
+                                    <div class="traffic-light bg-gray-600" data-light="red"></div>
+                                    <div class="traffic-light bg-gray-600" data-light="yellow"></div>
+                                    <div class="traffic-light bg-green-500 pulse-green" data-light="green"></div>
+                                </div>
+                            </div>
+                            <div class="road-horizontal congestion-low">
+                                <div class="vehicle"></div>
+                            </div>
+                            <div class="road-vertical congestion-low"></div>
+                            <div class="text-xs text-center mt-2">
+                                <span class="text-green-400">Light Traffic</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytics Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-gray-800 rounded-lg p-6">
+                        <h3 class="text-lg font-semibold mb-4">Traffic Flow Over Time</h3>
+                        <canvas id="trafficChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-6">
+                        <h3 class="text-lg font-semibold mb-4">Signal Optimization Impact</h3>
+                        <canvas id="optimizationChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Events -->
+                <div class="bg-gray-800 rounded-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                        Recent AI Decisions & Events
+                    </h3>
+                    <div class="space-y-3" id="eventLog">
+                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span>Optimized signal timing at Intersection A3 - reduced wait time by 15s</span>
+                            </div>
+                            <span class="text-gray-400 text-sm">2 min ago</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                <span>Detected congestion buildup on Main St - adjusting green light duration</span>
+                            </div>
+                            <span class="text-gray-400 text-sm">5 min ago</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                <span>Animal crossing detected at Pine St & 2nd Ave - emergency signal override</span>
+                            </div>
+                            <span class="text-gray-400 text-sm">8 min ago</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-purple-500 rounded-full"></div>
+                                <span>ML model updated with new traffic patterns - accuracy improved to 94.2%</span>
+                            </div>
+                            <span class="text-gray-400 text-sm">12 min ago</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Global variables for AI detection simulation
+        let detectionIntervals = [];
+        let canvasContexts = {};
+        let feedsActive = true;
+
+        // Initialize CCTV canvases
+        function initializeCanvases() {
+            for (let i = 1; i <= 3; i++) {
+                const canvas = document.getElementById(`canvas${i}`);
+                const ctx = canvas.getContext('2d');
+                canvasContexts[i] = ctx;
+                
+                // Set canvas size
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                
+                // Start simulated video feed
+                startSimulatedFeed(i);
+            }
+        }
+
+        // Simulate live video feed with moving objects
+        function startSimulatedFeed(feedId) {
+            const canvas = document.getElementById(`canvas${feedId}`);
+            const ctx = canvasContexts[feedId];
+            let frame = 0;
+            
+            function drawFrame() {
+                if (!feedsActive) return;
+                
+                // Clear canvas
+                ctx.fillStyle = '#1f2937';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw road lines
+                ctx.strokeStyle = '#6b7280';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([10, 5]);
+                
+                // Horizontal road
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height / 2);
+                ctx.lineTo(canvas.width, canvas.height / 2);
+                ctx.stroke();
+                
+                // Vertical road
+                ctx.beginPath();
+                ctx.moveTo(canvas.width / 2, 0);
+                ctx.lineTo(canvas.width / 2, canvas.height);
+                ctx.stroke();
+                
+                ctx.setLineDash([]);
+                
+                // Draw moving vehicles
+                drawMovingVehicles(ctx, canvas, frame, feedId);
+                
+                frame++;
+                if (feedsActive) {
+                    requestAnimationFrame(drawFrame);
+                }
+            }
+            
+            drawFrame();
+        }
+
+        // Draw simulated moving vehicles
+        function drawMovingVehicles(ctx, canvas, frame, feedId) {
+            const vehicles = [
+                { type: 'car', color: '#3b82f6', x: (frame * 2) % (canvas.width + 40) - 20, y: canvas.height / 2 - 10, w: 30, h: 15 },
+                { type: 'truck', color: '#ef4444', x: canvas.width - ((frame * 1.5) % (canvas.width + 50)), y: canvas.height / 2 + 5, w: 40, h: 20 },
+                { type: 'person', color: '#f59e0b', x: canvas.width / 2 + Math.sin(frame * 0.1) * 20, y: (frame * 0.8) % (canvas.height + 20) - 10, w: 8, h: 15 },
+                { type: 'bike', color: '#10b981', x: ((frame * 3) % (canvas.width + 30)) - 15, y: canvas.height / 2 - 25, w: 20, h: 10 }
+            ];
+            
+            vehicles.forEach((vehicle, index) => {
+                if (vehicle.x > -vehicle.w && vehicle.x < canvas.width && vehicle.y > -vehicle.h && vehicle.y < canvas.height) {
+                    ctx.fillStyle = vehicle.color;
+                    ctx.fillRect(vehicle.x, vehicle.y, vehicle.w, vehicle.h);
+                    
+                    // Simulate AI detection with random chance
+                    if (Math.random() < 0.3) {
+                        simulateDetection(feedId, vehicle, index);
+                    }
+                }
+            });
+        }
+
+        // Simulate AI detection overlay
+        function simulateDetection(feedId, vehicle, index) {
+            const overlay = document.getElementById(`overlay${feedId}`);
+            const detectionId = `detection_${feedId}_${index}`;
+            
+            // Remove existing detection
+            const existing = document.getElementById(detectionId);
+            if (existing) existing.remove();
+            
+            // Create detection box
+            const detection = document.createElement('div');
+            detection.id = detectionId;
+            detection.className = `detection-box detection-${vehicle.type}`;
+            detection.style.left = `${vehicle.x}px`;
+            detection.style.top = `${vehicle.y}px`;
+            detection.style.width = `${vehicle.w}px`;
+            detection.style.height = `${vehicle.h}px`;
+            detection.textContent = `${vehicle.type.toUpperCase()} ${(Math.random() * 0.3 + 0.7).toFixed(2)}`;
+            
+            overlay.appendChild(detection);
+            
+            // Remove after animation
+            setTimeout(() => {
+                if (detection.parentNode) {
+                    detection.parentNode.removeChild(detection);
+                }
+            }, 2000);
+        }
+
+        // Handle video upload
+        function handleVideoUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const userVideo = document.getElementById('userVideo');
+                const userFeed = document.getElementById('userFeed');
+                
+                userVideo.src = URL.createObjectURL(file);
+                userFeed.style.display = 'block';
+                
+                // Simulate processing on user video
+                userVideo.addEventListener('play', () => {
+                    simulateUserVideoDetection();
+                });
+                
+                // Show success message
+                addEvent(`User video uploaded: ${file.name} - AI processing started`);
+            }
+        }
+
+        // Simulate detection on user video
+        function simulateUserVideoDetection() {
+            const userOverlay = document.getElementById('userOverlay');
+            const userCount = document.getElementById('userCount');
+            let detectionCount = 0;
+            
+            const detectionInterval = setInterval(() => {
+                // Random detection simulation
+                if (Math.random() < 0.4) {
+                    const detection = document.createElement('div');
+                    detection.className = `detection-box detection-${['car', 'person', 'truck', 'bike'][Math.floor(Math.random() * 4)]}`;
+                    detection.style.left = `${Math.random() * 80 + 10}%`;
+                    detection.style.top = `${Math.random() * 80 + 10}%`;
+                    detection.style.width = `${Math.random() * 60 + 40}px`;
+                    detection.style.height = `${Math.random() * 40 + 20}px`;
+                    detection.textContent = `DETECTED ${(Math.random() * 0.3 + 0.7).toFixed(2)}`;
+                    
+                    userOverlay.appendChild(detection);
+                    detectionCount++;
+                    userCount.textContent = detectionCount;
+                    
+                    setTimeout(() => {
+                        if (detection.parentNode) {
+                            detection.parentNode.removeChild(detection);
+                        }
+                    }, 2000);
+                }
+            }, 1000);
+            
+            // Stop after video ends or 30 seconds
+            setTimeout(() => clearInterval(detectionInterval), 30000);
+        }
+
+        // Toggle all feeds
+        function toggleAllFeeds() {
+            feedsActive = !feedsActive;
+            const feeds = document.querySelectorAll('.cctv-feed');
+            feeds.forEach(feed => {
+                if (feedsActive) {
+                    feed.classList.add('active');
+                } else {
+                    feed.classList.remove('active');
+                }
+            });
+            
+            if (feedsActive) {
+                initializeCanvases();
+            }
+        }
+
+        // Initialize charts
+        const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+        const optimizationCtx = document.getElementById('optimizationChart').getContext('2d');
+
+        const trafficChart = new Chart(trafficCtx, {
+            type: 'line',
+            data: {
+                labels: ['6:00', '7:00', '8:00', '9:00', '10:00', '11:00', '12:00'],
+                datasets: [{
+                    label: 'Vehicles Detected',
+                    data: [120, 450, 800, 650, 400, 350, 500],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4
+                }, {
+                    label: 'AI Optimized Flow',
+                    data: [130, 480, 720, 600, 420, 380, 520],
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        labels: { color: '#e5e7eb' }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
+                    y: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } }
+                }
+            }
+        });
+
+        const optimizationChart = new Chart(optimizationCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Before AI', 'After AI'],
+                datasets: [{
+                    label: 'Average Commute Time (min)',
+                    data: [28.5, 25.1],
+                    backgroundColor: ['#ef4444', '#10b981'],
+                    borderColor: ['#dc2626', '#059669'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        labels: { color: '#e5e7eb' }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
+                    y: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } }
+                }
+            }
+        });
+
+        // Simulate real-time updates with AI metrics
+        function updateMetrics() {
+            // Performance metrics
+            const commuteReduction = (10 + Math.random() * 5).toFixed(1);
+            const accuracy = (94 + Math.random() * 4).toFixed(1);
+            const optimization = (90 + Math.random() * 8).toFixed(1);
+            const latency = Math.floor(35 + Math.random() * 20);
+
+            document.getElementById('commuteReduction').textContent = commuteReduction + '%';
+            document.getElementById('accuracy').textContent = accuracy + '%';
+            document.getElementById('optimization').textContent = optimization + '%';
+            document.getElementById('latency').textContent = latency + 'ms';
+
+            // Live detection stats
+            const vehicleCount = Math.floor(200 + Math.random() * 100);
+            const personCount = Math.floor(70 + Math.random() * 40);
+            const bikeCount = Math.floor(15 + Math.random() * 20);
+            const truckCount = Math.floor(8 + Math.random() * 10);
+
+            document.getElementById('vehicleCount').textContent = vehicleCount;
+            document.getElementById('personCount').textContent = personCount;
+            document.getElementById('bikeCount').textContent = bikeCount;
+            document.getElementById('truckCount').textContent = truckCount;
+
+            // AI model metrics
+            const yoloFps = (25 + Math.random() * 8).toFixed(1);
+            const activeTrack = Math.floor(120 + Math.random() * 80);
+            const rlReward = (0.7 + Math.random() * 0.3).toFixed(2);
+
+            document.getElementById('yoloFps').textContent = yoloFps;
+            document.getElementById('activeTrack').textContent = activeTrack;
+            document.getElementById('rlReward').textContent = '+' + rlReward;
+
+            // Update CCTV feed stats
+            for (let i = 1; i <= 3; i++) {
+                const count = Math.floor(3 + Math.random() * 15);
+                const fps = Math.floor(25 + Math.random() * 8);
+                document.getElementById(`count${i}`).textContent = count;
+                document.getElementById(`fps${i}`).textContent = fps;
+            }
+
+            // Update timestamp
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+        }
+
+        // Simulate traffic light changes
+        function updateTrafficLights() {
+            const intersections = document.querySelectorAll('.intersection-card');
+            intersections.forEach(intersection => {
+                const lights = intersection.querySelectorAll('.traffic-light');
+                const currentActive = intersection.querySelector('.pulse-red, .pulse-yellow, .pulse-green');
+                
+                if (Math.random() < 0.3) { // 30% chance to change
+                    // Reset all lights
+                    lights.forEach(light => {
+                        light.className = 'traffic-light bg-gray-600';
+                    });
+                    
+                    // Activate random light
+                    const randomLight = Math.floor(Math.random() * 3);
+                    const colors = ['red', 'yellow', 'green'];
+                    const pulseClasses = ['pulse-red', 'pulse-yellow', 'pulse-green'];
+                    const bgColors = ['bg-red-500', 'bg-yellow-500', 'bg-green-500'];
+                    
+                    lights[randomLight].className = `traffic-light ${bgColors[randomLight]} ${pulseClasses[randomLight]}`;
+                }
+            });
+        }
+
+        // Add new AI-powered events to log
+        function addEvent(customEvent = null) {
+            const aiEvents = [
+                "YOLOv8 detected 15 vehicles at JKLU Gate - optimizing signal timing",
+                "DeepSORT tracking 47 objects - predicting traffic flow patterns",
+                "Anomaly detection: Unusual pedestrian density at Mahapura Circle",
+                "RL agent achieved +0.92 reward - implementing new signal strategy",
+                "OpenCV motion analysis: Heavy congestion building on Ajmer Road",
+                "Multi-object tracking: 8 vehicles, 3 pedestrians, 1 cyclist detected",
+                "AI confidence threshold adjusted to 0.38 for better accuracy",
+                "Emergency vehicle detected via YOLO - clearing Bagru Chauraha",
+                "Weather-adaptive AI: Adjusting detection sensitivity for dust storm",
+                "Reinforcement learning model updated - 2.1k episodes completed",
+                "Computer vision detected jaywalking at Sitapura Industrial area",
+                "AI predicted traffic surge near Sanganer Airport - pre-optimizing signals"
+            ];
+            
+            const eventLog = document.getElementById('eventLog');
+            const newEvent = document.createElement('div');
+            newEvent.className = 'flex items-center justify-between p-3 bg-gray-700 rounded-lg';
+            newEvent.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span>${customEvent || aiEvents[Math.floor(Math.random() * aiEvents.length)]}</span>
+                </div>
+                <span class="text-gray-400 text-sm">Just now</span>
+            `;
+            
+            eventLog.insertBefore(newEvent, eventLog.firstChild);
+            
+            // Keep only last 5 events
+            while (eventLog.children.length > 5) {
+                eventLog.removeChild(eventLog.lastChild);
+            }
+        }
+
+        // Incident Management System
+        let activeIncidents = [];
+        
+        function simulateIncident(type) {
+            const locations = [
+                { name: 'JKLU Gate', id: 'A1', camera: 1 },
+                { name: 'Mahapura Circle', id: 'A2', camera: 2 },
+                { name: 'Ajmer Road Junction', id: 'A3', camera: null },
+                { name: 'Bagru Chauraha', id: 'B1', camera: 3 },
+                { name: 'Sitapura Industrial', id: 'B2', camera: null },
+                { name: 'Tonk Road Circle', id: 'B3', camera: null },
+                { name: 'Sanganer Airport', id: 'C1', camera: null },
+                { name: 'Mansarovar Metro', id: 'C2', camera: null },
+                { name: 'Vaishali Nagar', id: 'C3', camera: null }
+            ];
+            
+            const location = locations[Math.floor(Math.random() * locations.length)];
+            const incidentId = Date.now();
+            
+            const incidents = {
+                accident: {
+                    icon: '🚗💥',
+                    title: 'Traffic Accident',
+                    description: `Vehicle collision detected at ${location.name}`,
+                    severity: 'critical',
+                    duration: 15000,
+                    actions: ['Emergency services dispatched', 'Traffic rerouted', 'Signals optimized for detour']
+                },
+                police: {
+                    icon: '🚔',
+                    title: 'Police Activity',
+                    description: `Special force operation at ${location.name}`,
+                    severity: 'warning',
+                    duration: 20000,
+                    actions: ['Area secured', 'Traffic flow restricted', 'Alternative routes suggested']
+                },
+                ambulance: {
+                    icon: '🚑',
+                    title: 'Emergency Vehicle',
+                    description: `Ambulance priority corridor at ${location.name}`,
+                    severity: 'info',
+                    duration: 8000,
+                    actions: ['Emergency corridor cleared', 'Signal preemption activated', 'Traffic held']
+                }
+            };
+            
+            const incident = incidents[type];
+            incident.location = location;
+            incident.id = incidentId;
+            incident.timestamp = new Date();
+            
+            // Add to active incidents
+            activeIncidents.push(incident);
+            
+            // Show incident alert
+            showIncidentAlert(incident);
+            
+            // Highlight affected intersection
+            highlightIntersection(location.id, incident.severity);
+            
+            // Show camera overlay if available
+            if (location.camera) {
+                showCameraIncidentOverlay(location.camera, incident);
+            }
+            
+            // Add to event log
+            addEvent(`🚨 INCIDENT: ${incident.title} - ${incident.description}`);
+            
+            // Auto-resolve after duration
+            setTimeout(() => {
+                resolveIncident(incidentId);
+            }, incident.duration);
+        }
+        
+        function showIncidentAlert(incident) {
+            const alertsContainer = document.getElementById('incidentAlerts');
+            
+            // Remove "no incidents" message
+            const noIncidents = alertsContainer.querySelector('.text-gray-400');
+            if (noIncidents) noIncidents.remove();
+            
+            const alertDiv = document.createElement('div');
+            alertDiv.id = `incident-${incident.id}`;
+            alertDiv.className = `incident-alert incident-${incident.severity} p-3 rounded-lg`;
+            
+            alertDiv.innerHTML = `
+                <div class="flex items-start justify-between">
+                    <div class="flex items-start space-x-2">
+                        <span class="text-lg">${incident.icon}</span>
+                        <div>
+                            <div class="font-medium text-sm">${incident.title}</div>
+                            <div class="text-xs text-gray-300">${incident.description}</div>
+                            <div class="text-xs text-gray-400 mt-1">${incident.timestamp.toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                    <button onclick="resolveIncident(${incident.id})" class="text-gray-400 hover:text-white text-xs">
+                        ✕
+                    </button>
+                </div>
+                <div class="mt-2 space-y-1">
+                    ${incident.actions.map(action => `
+                        <div class="text-xs text-gray-300 flex items-center">
+                            <div class="w-1 h-1 bg-green-400 rounded-full mr-2"></div>
+                            ${action}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            alertsContainer.appendChild(alertDiv);
+        }
+        
+        function highlightIntersection(intersectionId, severity) {
+            const intersection = document.querySelector(`[data-intersection="${intersectionId}"]`);
+            if (intersection) {
+                intersection.classList.add('intersection-incident');
+                
+                // Add incident indicator
+                const indicator = document.createElement('div');
+                indicator.className = 'absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse';
+                indicator.style.zIndex = '20';
+                intersection.style.position = 'relative';
+                intersection.appendChild(indicator);
+            }
+        }
+        
+        function showCameraIncidentOverlay(cameraId, incident) {
+            const feed = document.getElementById(`feed${cameraId}`);
+            if (feed) {
+                const overlay = document.createElement('div');
+                overlay.id = `camera-incident-${incident.id}`;
+                overlay.className = 'incident-overlay';
+                overlay.innerHTML = `
+                    <div class="text-center">
+                        <div class="text-2xl mb-1">${incident.icon}</div>
+                        <div class="text-sm font-bold">${incident.title.toUpperCase()}</div>
+                        <div class="text-xs">${incident.location.name}</div>
+                    </div>
+                `;
+                
+                feed.querySelector('.aspect-video').appendChild(overlay);
+            }
+        }
+        
+        function resolveIncident(incidentId) {
+            // Remove from active incidents
+            activeIncidents = activeIncidents.filter(inc => inc.id !== incidentId);
+            
+            // Remove alert
+            const alertElement = document.getElementById(`incident-${incidentId}`);
+            if (alertElement) {
+                alertElement.remove();
+            }
+            
+            // Remove camera overlay
+            const cameraOverlay = document.getElementById(`camera-incident-${incidentId}`);
+            if (cameraOverlay) {
+                cameraOverlay.remove();
+            }
+            
+            // Remove intersection highlighting
+            const intersections = document.querySelectorAll('.intersection-incident');
+            intersections.forEach(intersection => {
+                intersection.classList.remove('intersection-incident');
+                const indicator = intersection.querySelector('.animate-pulse');
+                if (indicator) indicator.remove();
+            });
+            
+            // Show "no incidents" message if no active incidents
+            const alertsContainer = document.getElementById('incidentAlerts');
+            if (activeIncidents.length === 0 && alertsContainer.children.length === 0) {
+                alertsContainer.innerHTML = '<div class="text-sm text-gray-400 text-center py-2">No active incidents detected</div>';
+            }
+            
+            addEvent(`✅ Incident resolved - Normal traffic flow restored`);
+        }
+        
+        // Auto-generate random incidents
+        function autoGenerateIncidents() {
+            if (Math.random() < 0.1 && activeIncidents.length < 2) { // 10% chance, max 2 incidents
+                const types = ['accident', 'police', 'ambulance'];
+                const randomType = types[Math.floor(Math.random() * types.length)];
+                simulateIncident(randomType);
+            }
+        }
+
+        // Control functions
+        function emergencyOverride() {
+            alert('Emergency override activated! All signals set to flashing red.');
+            // In real system, this would trigger emergency protocols
+        }
+
+        function pauseSystem() {
+            alert('AI system paused. Manual control activated.');
+            // In real system, this would pause AI decision making
+        }
+
+        function resetOptimization() {
+            alert('Optimization parameters reset to default values.');
+            // In real system, this would reset ML model parameters
+        }
+
+        // Start AI simulations and initialize system
+        function initializeSystem() {
+            // Initialize CCTV feeds
+            initializeCanvases();
+            
+            // Start real-time updates
+            setInterval(updateMetrics, 3000); // Update every 3 seconds for more dynamic feel
+            setInterval(updateTrafficLights, 6000); // Update every 6 seconds
+            setInterval(addEvent, 12000); // Add AI event every 12 seconds
+            setInterval(autoGenerateIncidents, 30000); // Check for random incidents every 30 seconds
+            
+            // Initial updates
+            updateMetrics();
+            updateTrafficLights();
+            
+            // Add initial AI system startup events
+            setTimeout(() => addEvent("AI Traffic Management System initialized - all models active"), 1000);
+            setTimeout(() => addEvent("YOLO detection pipeline started - processing 3 CCTV feeds"), 3000);
+            setTimeout(() => addEvent("DeepSORT tracking enabled - multi-object tracking active"), 5000);
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', initializeSystem);
+        
+        // Handle window resize for canvases
+        window.addEventListener('resize', () => {
+            if (feedsActive) {
+                setTimeout(initializeCanvases, 100);
+            }
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97ee81d9612254ad',t:'MTc1NzgzODQ2OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
 
